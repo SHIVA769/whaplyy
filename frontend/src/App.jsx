@@ -69,6 +69,16 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
+const RoleRoute = ({ children, allowedRoles, redirectTo }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) return <PageLoader />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!allowedRoles.includes(user.role)) return <Navigate to={redirectTo} replace />;
+
+  return children;
+};
+
 function App() {
   return (
     <Suspense fallback={<PageLoader />}>
@@ -87,7 +97,7 @@ function App() {
         </Route>
 
         {/* Super Admin Routes */}
-        <Route path="/admin" element={<ProtectedRoute><SuperAdminLayout /></ProtectedRoute>}>
+        <Route path="/admin" element={<RoleRoute allowedRoles={['super_admin']} redirectTo="/company"><SuperAdminLayout /></RoleRoute>}>
           <Route index element={<SuperAdminDashboard />} />
           <Route path="companies" element={<Companies />} />
           <Route path="advertisements" element={<Advertisements />} />
@@ -101,7 +111,7 @@ function App() {
         </Route>
 
         {/* Company / Merchant Routes */}
-        <Route path="/company" element={<ProtectedRoute><CompanyLayout /></ProtectedRoute>}>
+        <Route path="/company" element={<RoleRoute allowedRoles={['company_owner', 'staff']} redirectTo="/admin"><CompanyLayout /></RoleRoute>}>
           <Route index element={<CompanyDashboard />} />
           <Route path="stores" element={<Stores />} />
           <Route path="products" element={<Products />} />
