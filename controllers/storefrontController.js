@@ -2,7 +2,6 @@ import { Advertisement } from '../models/Advertisement.js';
 import { Store } from '../models/Store.js';
 import { Product, Category, Tax, Order, Customer, ShippingMethod, CompanyMessagingSettings } from '../models/ECommerce.js';
 import { StoreCoupon } from '../models/StoreCoupon.js';
-import { Notification } from '../models/Notification.js';
 import { Subscriber, ContactInquiry, LandingPageConfig, CustomPage } from '../models/LandingBuilder.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 import { renderOrderMessage } from '../utils/templateEngine.js';
@@ -12,6 +11,7 @@ import { sendTelegramMessage } from '../services/telegramService.js';
 import { dispatchWebhook } from '../services/webhookService.js';
 import { generateOrderInvoicePDF } from '../services/pdfInvoiceService.js';
 import { prisma } from '../config/prisma.js';
+import { Prisma } from '@prisma/client';
 
 // ==========================================
 // 5.28 Public Storefront Endpoints
@@ -158,17 +158,22 @@ export const getStoreCatalog = async (req, res) => {
 export const getProductQuickView = async (req, res) => {
   try {
     const { slug, productId } = req.params;
-    const store = await Store.findOne({ slug, status: 'active' });
+    const store = await prisma.store.findFirst({ where: { slug, status: 'active' } });
     if (!store) return sendError(res, 'Store not found.', 404);
 
-    const product = await Product.findOne({ _id: productId, storeId: store._id }).populate('categoryId taxId');
+    const product = await prisma.product.findFirst({
+      where: { id: productId, storeId: store.id, status: 'active' },
+      include: { category: true, tax: true },
+    });
     if (!product) return sendError(res, 'Product not found.', 404);
 
     // Increment views count
-    product.viewsCount = (product.viewsCount || 0) + 1;
-    await product.save();
+    const updatedProduct = await prisma.product.update({
+      where: { id: product.id },
+      data: { viewsCount: product.viewsCount + 1 },
+    });
 
-    return sendSuccess(res, formatProductForStorefront(product));
+    return sendSuccess(res, formatProductForStorefront({ ...updatedProduct, category: product.category, tax: product.tax }));
   } catch (error) {
     return sendError(res, error.message, 500);
   }
@@ -181,14 +186,16 @@ export const applyCoupon = async (req, res) => {
 
     if (!code) return sendError(res, 'Coupon code is required.', 400);
 
-    const store = await Store.findOne({ slug });
+    const store = await prisma.store.findFirst({ where: { slug } });
     if (!store) return sendError(res, 'Store not found.', 404);
 
-    const coupon = await StoreCoupon.findOne({
-      storeId: store._id,
+    const coupon = await prisma.storeCoupon.findFirst({
+      where: {
+      storeId: store.id,
       code: code.toUpperCase().trim(),
       status: 'active',
-      endDate: { $gte: new Date() },
+      endDate: { gte: new Date() },
+      },
     });
 
     if (!coupon) {
@@ -279,13 +286,22 @@ export const checkoutStoreOrder = async (req, res) => {
     let subtotal = 0;
     let taxTotal = 0;
     const processedItems = [];
+    const products = await Promise.all(
+      items.map((item) =>
+        prisma.product.findFirst({
+          where: { id: item.productId, storeId: store.id, status: 'active' },
+          include: { tax: true },
+        })
+      )
+    );
 
-    for (const item of items) {
-      const product = await prisma.product.findFirst({
-        where: { id: item.productId, storeId: store.id },
-        include: { tax: true },
-      });
-      if (!product) continue;
+    const missingProductIndex = products.findIndex((product) => !product);
+    if (missingProductIndex !== -1) {
+      return sendError(res, `Product '${items[missingProductIndex]?.productId || 'unknown'}' is no longer available in this store.`, 400);
+    }
+
+    for (const [index, item] of items.entries()) {
+      const product = products[index];
 
       const itemPrice = product.salePrice !== null && product.salePrice > 0 ? product.salePrice : product.price;
       const quantity = Math.max(1, item.quantity || 1);
@@ -308,7 +324,7 @@ export const checkoutStoreOrder = async (req, res) => {
         image: product.coverImage,
         price: itemPrice,
         quantity,
-        selectedVariant: item.selectedVariant || null,
+        selectedVariant: item.selectedVariant == null ? Prisma.JsonNull : item.selectedVariant,
         taxName: itemTaxName,
         taxRate: itemTaxRate,
         taxAmount: itemTaxAmount,
@@ -579,32 +595,36 @@ export const checkoutStoreOrder = async (req, res) => {
 export const confirmStorefrontPayment = async (req, res) => {
   try {
     const { slug, orderNumber } = req.params;
-    const store = await Store.findOne({ slug, status: 'active' });
+    const store = await prisma.store.findFirst({ where: { slug, status: 'active' } });
     if (!store) return sendError(res, 'Store not found.', 404);
 
-    const order = await Order.findOne({ orderNumber, storeId: store._id });
+    const order = await prisma.order.findFirst({ where: { orderNumber, storeId: store.id } });
     if (!order) return sendError(res, 'Order not found.', 404);
     if (order.paymentMethod !== 'UPI') return sendError(res, 'This order does not use UPI payment.', 400);
     if (order.paymentStatus === 'paid') return sendSuccess(res, order, 'Payment is already confirmed.');
 
-    order.paymentStatus = 'paid';
-    order.timeline.push({
+    const timeline = Array.isArray(order.timeline) ? order.timeline : [];
+    timeline.push({
       status: 'Payment Confirmed',
-      timestamp: new Date(),
+      timestamp: new Date().toISOString(),
       note: 'UPI payment marked as paid by the customer. Merchant verification is still recommended.',
       completed: true,
     });
-    await order.save();
+    const updatedOrder = await prisma.order.update({
+      where: { id: order.id },
+      data: { paymentStatus: 'paid', timeline },
+    });
 
-    await Notification.create({
-      storeId: store._id,
+    await prisma.notification.create({
+      storeId: store.id,
+      companyId: store.companyId,
       type: 'payment_confirmed',
       title: 'Payment Confirmed',
       message: `${order.customerName} confirmed UPI payment of ₹${Number(order.total || 0).toFixed(2)} for order #${order.orderNumber}. Please verify in your bank/UPI app before fulfilling.`,
-      orderId: order._id,
+      orderId: order.id,
     });
 
-    return sendSuccess(res, order, 'UPI payment confirmation received.');
+    return sendSuccess(res, updatedOrder, 'UPI payment confirmation received.');
   } catch (error) {
     return sendError(res, error.message, 500);
   }
@@ -613,10 +633,13 @@ export const confirmStorefrontPayment = async (req, res) => {
 export const trackPublicOrder = async (req, res) => {
   try {
     const { slug, orderNumber } = req.params;
-    const store = await Store.findOne({ slug });
+    const store = await prisma.store.findFirst({ where: { slug } });
     if (!store) return sendError(res, 'Store not found.', 404);
 
-    const order = await Order.findOne({ storeId: store._id, orderNumber }).populate('shippingMethodId');
+    const order = await prisma.order.findFirst({
+      where: { storeId: store.id, orderNumber },
+      include: { items: true, shippingMethod: true },
+    });
     if (!order) return sendError(res, 'Order not found with that order number.', 404);
 
     return sendSuccess(res, order);
@@ -628,10 +651,13 @@ export const trackPublicOrder = async (req, res) => {
 export const downloadPublicOrderInvoice = async (req, res) => {
   try {
     const { slug, orderNumber } = req.params;
-    const store = await Store.findOne({ slug });
+    const store = await prisma.store.findFirst({ where: { slug } });
     if (!store) return sendError(res, 'Store not found.', 404);
 
-    const order = await Order.findOne({ storeId: store._id, orderNumber });
+    const order = await prisma.order.findFirst({
+      where: { storeId: store.id, orderNumber },
+      include: { items: true },
+    });
     if (!order) return sendError(res, 'Order not found.', 404);
 
     generateOrderInvoicePDF(order, store, res);

@@ -101,10 +101,6 @@ export const requireRole = (allowedRoles = []) => {
  * Ensures request has tenant scope (companyId)
  */
 export const requireCompanyScope = (req, res, next) => {
-  if (req.user.role === ROLES.SUPER_ADMIN) {
-    return next();
-  }
-
   const effectiveCompanyId = req.impersonatedCompanyId || req.user.companyId;
   if (!effectiveCompanyId) {
     return sendError(res, 'Tenant company context required for this operation.', 403);

@@ -166,16 +166,12 @@ export const getCompanies = async (req, res) => {
 
     const storeCounts = new Map();
     if (companies.length > 0) {
-      const counts = await prisma.$queryRaw`
-        SELECT "companyId", COUNT(*)::int AS count
-        FROM "Store"
-        WHERE CASE
-          WHEN "companyId" ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-          THEN "companyId"::uuid
-        END IN (${Prisma.join(companies.map((company) => company.id))})
-        GROUP BY "companyId"
-      `;
-      counts.forEach(({ companyId, count }) => storeCounts.set(companyId, count));
+      const counts = await prisma.store.groupBy({
+        by: ['companyId'],
+        where: { companyId: { in: companies.map((company) => company.id) } },
+        _count: { _all: true },
+      });
+      counts.forEach(({ companyId, _count }) => storeCounts.set(companyId, _count._all));
     }
 
     const enriched = companies.map(({ plan, users, storageUsedBytes, ...company }) => ({

@@ -73,15 +73,10 @@ export const getCompanyDashboardStats = async (req, res) => {
     const companyId = getCompanyId(req);
     const { storeId } = req.query;
 
-    const stores = await prisma.$queryRaw`
-      SELECT *
-      FROM "Store"
-      WHERE CASE
-        WHEN "companyId" ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-        THEN "companyId"::uuid
-      END = ${companyId}::uuid
-      ORDER BY "createdAt" DESC
-    `;
+    const stores = await prisma.store.findMany({
+      where: { companyId },
+      orderBy: { createdAt: 'desc' },
+    });
     const accessibleStores = stores.map((store) => ({ ...store, _id: store.id }));
     const selectedStoreId = storeId && storeId !== 'all' ? storeId : null;
     const storeIds = selectedStoreId
@@ -1256,6 +1251,10 @@ export const deleteRole = async (req, res) => {
 export const getCompanyPlansData = async (req, res) => {
   try {
     const companyId = getCompanyId(req);
+    if (!companyId) {
+      return sendError(res, 'Tenant company context required for this operation.', 403);
+    }
+
     const [company, plans, requests, orders, stores, users, products] = await Promise.all([
       prisma.company.findUnique({ where: { id: companyId }, include: { plan: true } }),
       prisma.plan.findMany({ where: { isActive: true }, orderBy: { monthlyPrice: 'asc' } }),
