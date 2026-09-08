@@ -1,0 +1,39 @@
+{
+  "name": "whatsstore-backend",
+  "version": "1.0.0",
+  "description": "WhatsStore SaaS REST API Backend",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "prestart": "prisma generate",
+    "start": "node server.js",
+    "predev": "prisma generate",
+    "dev": "nodemon server.js",
+    "prisma:validate": "prisma validate",
+    "prisma:push": "prisma db push",
+    "seed": "node seeds/seedData.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "axios": "^1.7.9",
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.7.5",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^9.9.4",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.9.16",
+    "pdfkit": "^0.16.0",
+    "prisma": "^5.22.0",
+    "qrcode": "^1.5.4",
+    "resend": "^6.21.0",
+    "twilio": "^6.1.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}

@@ -1,0 +1,1140 @@
+// This is your Prisma schema file.
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ========== ENUMS ==========
+
+enum UserRole {
+  super_admin
+  company_owner
+  staff
+  customer
+}
+
+enum UserStatus {
+  active
+  inactive
+  disabled
+}
+
+enum CompanyStatus {
+  active
+  inactive
+  suspended
+}
+
+enum BillingCycle {
+  monthly
+  yearly
+}
+
+enum StoreStatus {
+  active
+  inactive
+}
+
+enum StoreTheme {
+  theme_home_decor
+  theme_gadgets
+  theme_fashion
+  theme_bakery
+  theme_grocery
+  theme_car_accessories
+  theme_toys
+  theme_whatsapp_store
+}
+
+enum PWADisplayMode {
+  standalone
+  fullscreen
+  minimal_ui
+  browser
+}
+
+enum PWAOrientation {
+  portrait
+  landscape
+  any
+}
+
+enum WidgetPosition {
+  bottom_right
+  bottom_left
+}
+
+enum ProductStatus {
+  active
+  inactive
+  draft
+}
+
+enum TaxType {
+  percentage
+  fixed
+}
+
+enum CategoryStatus {
+  active
+  inactive
+}
+
+enum CustomerStatus {
+  active
+  inactive
+  blocked
+}
+
+enum ShippingMethodStatus {
+  active
+  inactive
+}
+
+enum ShippingType {
+  flat_rate
+  free_shipping
+  weight_based
+  local_pickup
+  express_delivery
+}
+
+enum ShippingZoneType {
+  domestic
+  global
+  regional
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  failed
+  refunded
+}
+
+enum FulfillmentStatus {
+  pending
+  processing
+  shipped
+  delivered
+  cancelled
+}
+
+enum OrderItemStatus {
+  pending
+  processing
+  shipped
+  delivered
+  cancelled
+}
+
+enum CouponStatus {
+  active
+  inactive
+}
+
+enum DiscountType {
+  flat
+  percentage
+  fixed
+}
+
+enum PlanRequestStatus {
+  pending
+  approved
+  rejected
+}
+
+enum NotificationType {
+  order_created
+  order_status_updated
+  payment_received
+  payment_failed
+  new_customer
+}
+
+enum AdvertisementStatus {
+  active
+  inactive
+}
+
+enum LocationStatus {
+  active
+  inactive
+}
+
+enum ReferralStatus {
+  active
+  inactive
+}
+
+enum PayoutStatus {
+  pending
+  approved
+  rejected
+}
+
+enum TemplateLanguage {
+  en
+  es
+  fr
+  de
+  it
+  pt
+  ru
+  ja
+  zh
+  ar
+  hi
+}
+
+enum DarkLightMode {
+  light
+  dark
+  system
+}
+
+enum LayoutDirection {
+  ltr
+  rtl
+}
+
+enum TimeFormat {
+  twelve_hour
+  twenty_four_hour
+}
+
+enum SidebarVariant {
+  inset
+  floating
+  minimal
+}
+
+enum SidebarStyle {
+  plain
+  colored
+  gradient
+}
+
+enum StorageDriver {
+  local
+  s3
+  wasabi
+}
+
+enum EncryptionType {
+  none
+  tls
+  ssl
+}
+
+enum HttpMethod {
+  GET
+  POST
+}
+
+enum WebhookStatus {
+  success
+  failed
+}
+
+enum SubscriberStatus {
+  subscribed
+  unsubscribed
+}
+
+enum Gender {
+  male
+  female
+  other
+  prefer_not_to_say
+}
+
+enum AddressType {
+  billing
+  shipping
+}
+
+// ========== MODELS ==========
+
+model User {
+  id                    String      @id @default(uuid()) @db.Uuid
+  name                  String
+  email                 String      @unique @db.VarChar(255)
+  password              String
+  role                  UserRole    @default(staff)
+  companyId             String?     @db.Uuid
+  company               Company?    @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  roleId                String?     @db.Uuid
+  customRole            Role?       @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  storeId               String?     @db.Uuid
+  store                 Store?      @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  avatar                String      @default("")
+  phone                 String      @default("")
+  status                UserStatus  @default(active)
+  emailVerified         Boolean     @default(false)
+  verificationToken     String?
+  resetPasswordToken    String?
+  resetPasswordExpires  DateTime?
+  preferredLanguage     String      @default("en")
+  
+  // Relations
+  planRequests          PlanRequest[]
+  planOrders            PlanOrder[]
+  referralsAsReferrer   Referral[]  @relation("ReferrerUser")
+  referralsAsReferred   Referral[]  @relation("ReferredUser")
+  createdRoles          Role[]      @relation("CreatedByUser")
+  customers             Customer[]
+  mediaFiles            MediaFile[]
+  
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  @@index([email])
+  @@index([companyId])
+  @@index([role])
+  @@index([status])
+}
+
+model Company {
+  id                      String      @id @default(uuid()) @db.Uuid
+  name                    String
+  email                   String      @unique @db.VarChar(255)
+  phone                   String      @default("")
+  planId                  String?     @db.Uuid
+  plan                    Plan?       @relation(fields: [planId], references: [id], onDelete: SetNull)
+  planBillingCycle        BillingCycle @default(monthly)
+  planExpiresAt           DateTime?
+  isTrialActive           Boolean     @default(false)
+  status                  CompanyStatus @default(active)
+  enableLogin             Boolean     @default(true)
+  storageUsedBytes        BigInt      @default(0)
+  referralCode            String?     @unique @db.VarChar(255)
+  referredBy              String?     @db.Uuid
+  referringCompany        Company?    @relation("Referrals", fields: [referredBy], references: [id], onDelete: SetNull)
+  referredCompanies       Company[]   @relation("Referrals")
+  referralBalance         Float       @default(0)
+  totalCommissionEarned   Float       @default(0)
+  pointsBalance           Int         @default(0)
+
+  // Relations
+  users                   User[]
+  stores                  Store[]
+  categories              Category[]
+  taxes                   Tax[]
+  products                Product[]
+  customers               Customer[]
+  orders                  Order[]
+  storeCoupons            StoreCoupon[]
+  shippingMethods         ShippingMethod[]
+  roles                   Role[]
+  notifications           Notification[]
+  pointsTransactions      PointsTransaction[]
+  planOrders              PlanOrder[]
+  planRequests            PlanRequest[]
+  payoutRequests          PayoutRequest[]
+  referralsAsReferrer     Referral[]  @relation("ReferrerCompany")
+  referralsAsReferred     Referral[]  @relation("ReferredCompany")
+  settings                Settings?
+  messagingSettings       CompanyMessagingSettings?
+  webhooks                WebhookConfig[]
+  mediaFiles              MediaFile[]
+
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+
+  @@index([email])
+  @@index([status])
+  @@index([referralCode])
+}
+
+model Store {
+  id                      String      @id @default(uuid()) @db.Uuid
+  companyId               String      @db.Uuid
+  company                 Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                    String
+  slug                    String      @unique @db.VarChar(255)
+  description             String      @default("")
+  email                   String      @default("")
+  logo                    String      @default("")
+  bannerImage             String      @default("")
+  welcomeMessage          String      @default("Welcome to our store! Discover premium products & order instantly via WhatsApp.")
+  storeDescription        String      @default("")
+  copyrightText           String      @default("© WhatsStore. All rights reserved.")
+  theme                   StoreTheme  @default(theme_home_decor)
+  status                  StoreStatus @default(active)
+  isMaintenance           Boolean     @default(false)
+  customCSS               String      @default("")
+  customJS                String      @default("")
+
+  // Embedded JSON fields for complex data
+  address                 Json        @default("{\"street\": \"\", \"city\": \"\", \"state\": \"\", \"country\": \"\", \"postalCode\": \"\"}")
+  socialLinks             Json        @default("{\"facebook\": \"\", \"instagram\": \"\", \"twitter\": \"\", \"youtube\": \"\", \"whatsapp\": \"\", \"email\": \"\"}")
+  domainConfig            Json        @default("{\"customDomainEnabled\": false, \"customDomain\": \"\", \"customSubdomainEnabled\": false, \"customSubdomain\": \"\"}")
+  pwaConfig               Json        @default("{\"enabled\": false, \"appName\": \"\", \"shortName\": \"\", \"appDescription\": \"\", \"themeColor\": \"#0284c7\", \"backgroundColor\": \"#ffffff\", \"displayMode\": \"standalone\", \"orientation\": \"portrait\"}")
+  whatsappWidget          Json        @default("{\"enabled\": true, \"phoneNumber\": \"\", \"defaultMessage\": \"Hi! I have a question about your products on the store.\", \"position\": \"bottom-right\", \"showOnMobile\": true, \"showOnDesktop\": true}")
+  paymentSettings         Json        @default("{\"upiEnabled\": false, \"upiId\": \"\", \"accountName\": \"\", \"qrCodeImage\": \"\", \"bankName\": \"\", \"accountNumber\": \"\", \"ifscCode\": \"\"}")
+
+  // Relations
+  users                   User[]
+  categories              Category[]
+  taxes                   Tax[]
+  products                Product[]
+  customers               Customer[]
+  orders                  Order[]
+  storeCoupons            StoreCoupon[]
+  shippingMethods         ShippingMethod[]
+  notifications           Notification[]
+  cartSessions            CartSession[]
+
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+
+  @@index([companyId])
+  @@index([slug])
+  @@index([status])
+}
+
+model Category {
+  id                  String          @id @default(cuid())
+  companyId           String          @db.Uuid
+  company             Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  storeId             String          @db.Uuid
+  store               Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name                String
+  slug                String
+  description         String          @default("")
+  image               String          @default("")
+  parentId            String?
+  parent              Category?       @relation("ParentCategories", fields: [parentId], references: [id], onDelete: SetNull)
+  children            Category[]      @relation("ParentCategories")
+  sortOrder           Int             @default(0)
+  status              CategoryStatus  @default(active)
+
+  // Relations
+  products            Product[]
+
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@unique([storeId, slug])
+  @@index([companyId])
+  @@index([storeId])
+}
+
+model Tax {
+  id                  String      @id @default(cuid())
+  companyId           String      @db.Uuid
+  company             Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  storeId             String      @db.Uuid
+  store               Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name                String
+  type                TaxType     @default(percentage)
+  rate                Float       @default(0)
+  priority            Int         @default(1)
+  isCompound          Boolean     @default(false)
+  status              CategoryStatus @default(active)
+
+  // Relations
+  products            Product[]
+
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  @@index([companyId])
+  @@index([storeId])
+}
+
+model Product {
+  id                  String          @id @default(cuid())
+  companyId           String          @db.Uuid
+  company             Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  storeId             String          @db.Uuid
+  store               Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name                String
+  slug                String
+  sku                 String
+  badge               String          @default("")
+  categoryId          String?
+  category            Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  taxId               String?
+  tax                 Tax?            @relation(fields: [taxId], references: [id], onDelete: SetNull)
+  coverImage          String
+  images              String[]        @default([])
+  isDisplay           Boolean         @default(true)
+  price               Float
+  salePrice           Float?
+  stockQuantity       Int             @default(0)
+  isDownloadable      Boolean         @default(false)
+  downloadableFile    String          @default("")
+  description         String          @default("")
+  specifications      String          @default("")
+  details             String          @default("")
+  variants            Json            @default("[]")
+  hasVariants         Boolean         @default(false)
+  customFields        Json            @default("[]")
+  soldCount           Int             @default(0)
+  viewsCount          Int             @default(0)
+  status              ProductStatus   @default(active)
+
+  // Relations
+  orderItems          OrderItem[]
+  cartItems           CartItem[]
+
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@unique([storeId, sku])
+  @@unique([storeId, slug])
+  @@index([companyId])
+  @@index([storeId])
+  @@index([categoryId])
+  @@index([status])
+}
+
+model Customer {
+  id                      String          @id @default(cuid())
+  companyId               String          @db.Uuid
+  company                 Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  storeId                 String          @db.Uuid
+  store                   Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  userId                  String?         @db.Uuid
+  user                    User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  firstName               String
+  lastName                String
+  email                   String
+  phone                   String          @default("")
+  photo                   String          @default("")
+  dob                     DateTime?
+  gender                  Gender          @default(prefer_not_to_say)
+  notes                   String          @default("")
+  status                  CustomerStatus @default(active)
+  billingAddress          Json            @default("{\"street\": \"\", \"country\": \"\", \"state\": \"\", \"city\": \"\", \"postalCode\": \"\"}")
+  shippingAddress         Json            @default("{\"street\": \"\", \"country\": \"\", \"state\": \"\", \"city\": \"\", \"postalCode\": \"\"}")
+  communicationPreferences Json           @default("{\"emailMarketing\": true, \"sms\": true, \"orderUpdates\": true}")
+  preferredLanguage       String          @default("en")
+  customerGroup           String          @default("General")
+  totalOrders             Int             @default(0)
+  totalSpent              Float           @default(0)
+  lastOrderAt             DateTime?
+
+  // Relations
+  orders                  Order[]
+  cartSessions            CartSession[]
+
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+
+  @@unique([storeId, email])
+  @@index([companyId])
+  @@index([storeId])
+  @@index([status])
+}
+
+model ShippingMethod {
+  id                      String              @id @default(cuid())
+  companyId               String              @db.Uuid
+  company                 Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  storeId                 String              @db.Uuid
+  store                   Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name                    String
+  type                    ShippingType        @default(flat_rate)
+  description             String              @default("")
+  cost                    Float               @default(0)
+  minOrderAmount          Float               @default(0)
+  estimatedDeliveryTime   String              @default("2-4 Business Days")
+  sortOrder               Int                 @default(0)
+  status                  ShippingMethodStatus @default(active)
+  zones                   Json                @default("{\"zoneType\": \"Domestic\", \"countries\": [], \"postalCodeRange\": \"\", \"maxDistanceKm\": 0}")
+  advanced                Json                @default("{\"maxWeightKg\": 0, \"maxDimensions\": \"\", \"requireSignature\": false, \"insuranceRequired\": false, \"trackingAvailable\": true, \"handlingFee\": 0}")
+  metrics                 Json                @default("{\"pageViews\": 0, \"orders30Days\": 0, \"deliveredOrders\": 0, \"avgDeliveryDays\": 3}")
+
+  // Relations
+  orders                  Order[]
+  cartSessions            CartSession[]
+
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+
+  @@index([companyId])
+  @@index([storeId])
+}
+
+model OrderItem {
+  id                  String      @id @default(cuid())
+  orderId             String
+  order               Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId           String
+  product             Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productName         String
+  sku                 String      @default("")
+  image               String      @default("")
+  price               Float
+  quantity            Int         @default(1)
+  selectedVariant     Json?
+  taxName             String      @default("")
+  taxRate             Float       @default(0)
+  taxAmount           Float       @default(0)
+  lineTotal           Float
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model Order {
+  id                      String              @id @default(cuid())
+  orderNumber             String              @unique
+  companyId               String              @db.Uuid
+  company                 Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  storeId                 String              @db.Uuid
+  store                   Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customerId              String?
+  customer                Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerName            String
+  customerEmail           String
+  customerPhone           String              @default("")
+
+  items                   OrderItem[]
+
+  subtotal                Float               @default(0)
+  taxTotal                Float               @default(0)
+  shippingCost            Float               @default(0)
+  discount                Float               @default(0)
+  total                   Float
+
+  couponCode              String              @default("")
+  shippingMethodName      String              @default("Standard Shipping")
+  shippingMethodId        String?
+  shippingMethod          ShippingMethod?     @relation(fields: [shippingMethodId], references: [id], onDelete: SetNull)
+
+  shippingAddress         Json                @default("{\"street\": \"\", \"country\": \"\", \"state\": \"\", \"city\": \"\", \"postalCode\": \"\"}")
+  billingAddress          Json                @default("{\"street\": \"\", \"country\": \"\", \"state\": \"\", \"city\": \"\", \"postalCode\": \"\"}")
+
+  paymentMethod           String              @default("Cash on Delivery")
+  paymentStatus           PaymentStatus       @default(pending)
+  fulfillmentStatus       FulfillmentStatus   @default(pending)
+  bankTransferReceipt     String              @default("")
+
+  timeline                Json                @default("[]")
+  whatsappPayload         String              @default("")
+  isGuest                 Boolean             @default(false)
+  notes                   String              @default("")
+
+  notifications           Notification[]
+
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+
+  @@index([companyId])
+  @@index([storeId])
+  @@index([customerId])
+  @@index([orderNumber])
+  @@index([paymentStatus])
+  @@index([fulfillmentStatus])
+}
+
+model StoreCoupon {
+  id                  String          @id @default(cuid())
+  companyId           String          @db.Uuid
+  company             Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  storeId             String          @db.Uuid
+  store               Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name                String
+  code                String
+  description         String          @default("")
+  discountType        DiscountType    @default(percentage)
+  discountValue       Float
+  startDate           DateTime        @default(now())
+  endDate             DateTime
+  minSpend            Float           @default(0)
+  maxSpend            Float           @default(0)
+  perCouponLimit      Int             @default(0)
+  perUserLimit        Int             @default(0)
+  usedCount           Int             @default(0)
+  totalSavings        Float           @default(0)
+  uniqueUsersCount    Int             @default(0)
+  status              CouponStatus    @default(active)
+
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@unique([storeId, code])
+  @@index([companyId])
+  @@index([storeId])
+}
+
+model PlatformCoupon {
+  id                  String          @id @default(cuid())
+  name                String
+  code                String          @unique
+  discountType        DiscountType
+  discountValue       Float
+  minSpend            Float           @default(0)
+  maxSpend            Float           @default(0)
+  totalLimit          Int             @default(0)
+  userLimit           Int             @default(0)
+  usedCount           Int             @default(0)
+  expiryDate          DateTime
+  status              CouponStatus    @default(active)
+
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@index([code])
+  @@index([status])
+}
+
+model Plan {
+  id                      String      @id @default(uuid()) @db.Uuid
+  name                    String
+  monthlyPrice            Float       @default(0)
+  yearlyPrice             Float       @default(0)
+  description             String      @default("")
+  maxStores               Int         @default(1)
+  maxUsersPerStore        Int         @default(2)
+  maxProductsPerStore     Int         @default(20)
+  storageLimitGB          Int         @default(1)
+  trialDays               Int         @default(0)
+  features                Json        @default("{\"customDomain\": false, \"customSubdomain\": false, \"pwa\": false, \"aiIntegration\": false, \"shippingMethod\": true, \"enableTrial\": false}")
+  themes                  String[]    @default([])
+  isActive                Boolean     @default(true)
+  isDefault               Boolean     @default(false)
+
+  // Relations
+  companies               Company[]
+  planOrders              PlanOrder[]
+  planRequests            PlanRequest[]
+  referrals               Referral[]
+
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+}
+
+model PlanOrder {
+  id                  String      @id @default(cuid())
+  orderNumber         String      @unique
+  orderDate           DateTime    @default(now())
+  companyId           String      @db.Uuid
+  company             Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId              String      @db.Uuid
+  user                User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId              String      @db.Uuid
+  plan                Plan        @relation(fields: [planId], references: [id], onDelete: Restrict)
+  duration            BillingCycle @default(monthly)
+  originalPrice       Float
+  couponCode          String      @default("")
+  discount            Float       @default(0)
+  finalPrice          Float
+  paymentMethod       String      @default("Stripe")
+  paymentStatus       PaymentStatus @default(paid)
+  status              PlanRequestStatus @default(approved)
+  invoiceUrl          String      @default("")
+  transactionId       String      @default("")
+
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  @@index([companyId])
+  @@index([planId])
+  @@index([status])
+}
+
+model PlanRequest {
+  id                  String                  @id @default(cuid())
+  companyId           String                  @db.Uuid
+  company             Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId              String                  @db.Uuid
+  user                User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId              String                  @db.Uuid
+  plan                Plan                    @relation(fields: [planId], references: [id], onDelete: Restrict)
+  duration            BillingCycle            @default(monthly)
+  price               Float
+  status              PlanRequestStatus       @default(pending)
+  notes               String                  @default("")
+  requestedAt         DateTime                @default(now())
+
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  @@index([companyId])
+  @@index([status])
+}
+
+model Role {
+  id                  String      @id @default(cuid())
+  companyId           String?     @db.Uuid
+  company             Company?    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                String
+  slug                String
+  description         String      @default("")
+  permissions         String[]    @default([])
+  createdByUserId     String?     @db.Uuid
+  createdByUser       User?       @relation("CreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  // Relations
+  users               User[]
+
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  @@index([companyId])
+}
+
+model Notification {
+  id                  String              @id @default(cuid())
+  storeId             String              @db.Uuid
+  store               Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  companyId           String              @db.Uuid
+  company             Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  type                NotificationType
+  title               String
+  message             String
+  orderId             String?             @db.Uuid
+  order               Order?              @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  read                Boolean             @default(false)
+
+  createdAt           DateTime            @default(now())
+
+  @@index([storeId])
+  @@index([companyId])
+  @@index([read])
+}
+
+model PointsTransaction {
+  id                  String      @id @default(cuid())
+  companyId           String      @db.Uuid
+  company             Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  amount              Int
+  reason              String
+  balanceAfter        Int
+  
+  createdAt           DateTime    @default(now())
+
+  @@index([companyId])
+  @@index([createdAt])
+}
+
+model Referral {
+  id                          String          @id @default(cuid())
+  referringCompanyId          String          @db.Uuid
+  referringCompany            Company         @relation("ReferrerCompany", fields: [referringCompanyId], references: [id], onDelete: Cascade)
+  referredCompanyId           String          @db.Uuid
+  referredCompany             Company         @relation("ReferredCompany", fields: [referredCompanyId], references: [id], onDelete: Cascade)
+  referrerUserId              String?         @db.Uuid
+  referrerUser                User?           @relation("ReferrerUser", fields: [referrerUserId], references: [id], onDelete: SetNull)
+  referredUserId              String?         @db.Uuid
+  referredUser                User?           @relation("ReferredUser", fields: [referredUserId], references: [id], onDelete: SetNull)
+  planId                      String?         @db.Uuid
+  plan                        Plan?           @relation(fields: [planId], references: [id], onDelete: SetNull)
+  planPrice                   Float           @default(0)
+  commissionPercentage        Float           @default(15)
+  totalCommissionEarned       Float           @default(0)
+  status                      ReferralStatus  @default(active)
+  history                     Json            @default("[]")
+
+  createdAt                   DateTime        @default(now())
+  updatedAt                   DateTime        @updatedAt
+
+  @@index([referringCompanyId])
+  @@index([referredCompanyId])
+  @@index([referrerUserId])
+  @@index([referredUserId])
+}
+
+model PayoutRequest {
+  id                  String          @id @default(cuid())
+  companyId           String          @db.Uuid
+  company             Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  amount              Float
+  status              PayoutStatus    @default(pending)
+  paymentMethod       String          @default("Bank Transfer")
+  notes               String          @default("")
+  requestedAt         DateTime        @default(now())
+  processedAt         DateTime?
+
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@index([companyId])
+  @@index([status])
+}
+
+model Settings {
+  id                      String          @id @default(cuid())
+  companyId               String?         @unique @db.Uuid
+  company                 Company?        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  // System Settings
+  defaultLanguage         String          @default("en")
+  dateFormat              String          @default("YYYY-MM-DD")
+  timeFormat              TimeFormat      @default(twelve_hour)
+  calendarStartDay        String          @default("monday")
+  defaultTimezone         String          @default("UTC")
+  emailVerification       Boolean         @default(false)
+  landingPageEnabled      Boolean         @default(true)
+  userRegistrationEnabled Boolean         @default(true)
+
+  // Brand Settings
+  darkLogo                String          @default("")
+  lightLogo               String          @default("")
+  favicon                 String          @default("")
+  titleText               String          @default("WhatsStore SaaS")
+  footerText              String          @default("© 2026 WhatsStore SaaS. All rights reserved.")
+  themeColor              String          @default("#0284c7")
+  sidebarVariant          SidebarVariant  @default(inset)
+  sidebarStyle            SidebarStyle    @default(plain)
+  layoutDirection         LayoutDirection @default(ltr)
+  themeMode               DarkLightMode   @default(light)
+
+  // Currency Settings
+  defaultCurrency         String          @default("INR")
+  symbol                  String          @default("₹")
+  decimalPlaces           Int             @default(2)
+  symbolPosition          String          @default("before")
+  decimalSeparator        String          @default(".")
+  thousandsSeparator      String          @default(",")
+  showDecimals            Boolean         @default(true)
+  addSpace                Boolean         @default(false)
+
+  // Email Settings
+  provider                String          @default("smtp")
+  mailDriver              String          @default("smtp")
+  emailHost               String          @default("smtp.mailtrap.io")
+  emailPort               Int             @default(587)
+  emailUsername           String          @default("")
+  emailPassword           String          @default("")
+  encryption              EncryptionType  @default(tls)
+  fromAddress             String          @default("noreply@whatsstore.io")
+  fromName                String          @default("WhatsStore SaaS")
+
+  // Storage Settings
+  activeDriver            StorageDriver   @default(local)
+  storageConfig           Json            @default("{}")
+
+  // Recaptcha Settings
+  recaptchaEnabled        Boolean         @default(false)
+  recaptchaVersion        String          @default("v2")
+  recaptchaSiteKey        String          @default("")
+  recaptchaSecretKey      String          @default("")
+
+  // ChatGPT Settings
+  chatGptApiKey           String          @default("")
+  chatGptModelName        String          @default("gpt-3.5-turbo")
+
+  // Cookie Settings
+  cookieEnableLogging     Boolean         @default(true)
+  cookieTitle             String          @default("We value your privacy")
+  cookieDescription       String          @default("We use cookies to improve your shopping experience, analyze site performance, and power WhatsApp ordering.")
+
+  // SEO Settings
+  seoMetaTitle            String          @default("WhatsStore — Multi-Tenant WhatsApp Store Builder")
+  seoMetaDescription      String          @default("Build high-converting WhatsApp stores in minutes. Multi-theme storefronts, direct ordering, instant catalog sync & zero coding.")
+
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+}
+
+model Advertisement {
+  id                  String                  @id @default(cuid())
+  title               String
+  description         String                  @default("")
+  imageUrl            String
+  linkUrl             String                  @default("")
+  status              AdvertisementStatus    @default(active)
+  startAt             DateTime?
+  endAt               DateTime?
+  sortOrder           Int                     @default(0)
+  clicks              Int                     @default(0)
+
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  @@index([status])
+}
+
+model Currency {
+  id                  String          @id @default(cuid())
+  name                String
+  code                String          @unique @db.VarChar(3)
+  symbol              String
+  description         String          @default("")
+  isDefault           Boolean         @default(false)
+
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@index([code])
+}
+
+model Location {
+  id                  String          @id @default(cuid())
+  type                String          @default("country")
+  name                String
+  code                String          @db.VarChar(10)
+  parentId            String?         @db.Uuid
+  parent              Location?       @relation("ParentLocation", fields: [parentId], references: [id], onDelete: SetNull)
+  children            Location[]      @relation("ParentLocation")
+  status              LocationStatus  @default(active)
+
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@index([code])
+  @@index([type])
+}
+
+model EmailTemplate {
+  id                  String                  @id @default(cuid())
+  name                String                  @unique
+  senderName          String                  @default("WhatsStore Notification")
+  isSystem            Boolean                 @default(true)
+  languages           Json                    @default("[]")
+  dynamicVariables    String[]                @default([])
+
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  @@index([name])
+}
+
+model NotificationTemplate {
+  id                  String                  @id @default(cuid())
+  name                String                  @unique
+  isEnabled           Boolean                 @default(true)
+  isSystem            Boolean                 @default(true)
+  languages           Json                    @default("[]")
+  dynamicVariables    String[]                @default([])
+
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  @@index([name])
+}
+
+model CompanyMessagingSettings {
+  id                          String          @id @default(cuid())
+  companyId                   String          @unique @db.Uuid
+  company                     Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  // COD
+  codEnabled                  Boolean         @default(true)
+
+  // WhatsApp
+  whatsappEnabled             Boolean         @default(true)
+  whatsappNumber              String          @default("")
+
+  // Telegram
+  telegramEnabled             Boolean         @default(false)
+  telegramBotToken            String          @default("")
+  telegramChatId              String          @default("")
+
+  // Message Templates
+  whatsappTemplate            String          @default("")
+  telegramTemplate            String          @default("")
+  messageTemplate             String          @default("")
+  itemVariableFormat          String          @default("")
+
+  // Twilio SMS
+  twilioEnabled               Boolean         @default(false)
+  twilioSid                   String          @default("")
+  twilioAuthToken             String          @default("")
+  twilioFromNumber            String          @default("")
+  twilioEvents                Json            @default("{\"orderCreated\": true, \"orderStatusUpdated\": true, \"newCustomer\": false}")
+
+  // Email Events
+  emailEvents                 Json            @default("{\"orderCreated\": true, \"orderCreatedOwner\": true, \"ownerStoreCreated\": true, \"statusChange\": true, \"userCreated\": true}")
+
+  createdAt                   DateTime        @default(now())
+  updatedAt                   DateTime        @updatedAt
+}
+
+model WebhookConfig {
+  id                  String          @id @default(cuid())
+  companyId           String          @db.Uuid
+  company             Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  module              String
+  method              HttpMethod      @default(POST)
+  url                 String
+  isActive            Boolean         @default(true)
+  secret              String          @default("")
+  logs                Json            @default("[]")
+
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@index([companyId])
+  @@index([isActive])
+}
+
+model MediaFile {
+  id                  String          @id @default(cuid())
+  companyId           String?         @db.Uuid
+  company             Company?        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId              String?         @db.Uuid
+  user                User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  originalName        String
+  fileName            String
+  fileUrl             String
+  fileType            String          @default("image")
+  fileSize            Int             @default(0)
+  mimeType            String          @default("image/jpeg")
+  storageDriver       StorageDriver   @default(local)
+
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@index([companyId])
+  @@index([userId])
+}
+
+model CartSession {
+  id                  String          @id @default(cuid())
+  sessionId           String
+  storeId             String          @db.Uuid
+  store               Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customerId          String?         @db.Uuid
+  customer            Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items               CartItem[]
+  couponCode          String          @default("")
+  shippingMethodId    String?         @db.Uuid
+  shippingMethod      ShippingMethod? @relation(fields: [shippingMethodId], references: [id], onDelete: SetNull)
+
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@unique([sessionId, storeId])
+  @@index([sessionId])
+  @@index([storeId])
+}
+
+model CartItem {
+  id                  String          @id @default(cuid())
+  cartSessionId       String          @db.Uuid
+  cartSession         CartSession     @relation(fields: [cartSessionId], references: [id], onDelete: Cascade)
+  productId           String          @db.Uuid
+  product             Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  selectedVariant     Json?
+  quantity            Int             @default(1)
+  price               Float
+
+  @@index([cartSessionId])
+  @@index([productId])
+}
+
+model ReferralSettings {
+  id                      String          @id @default(cuid())
+  isEnabled               Boolean         @default(true)
+  commissionPercentage    Float           @default(15)
+  minThresholdAmount      Float           @default(50)
+  guidelines              String          @default("Earn recurring commission on every company that subscribes using your referral link.")
+
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+}
