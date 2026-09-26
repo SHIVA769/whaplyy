@@ -34,6 +34,15 @@ const sanitizeUser = (user, company = null) => ({
   emailVerified: user.emailVerified,
 });
 
+const serializeCompany = (company) => {
+  if (!company) return null;
+
+  return {
+    ...company,
+    storageUsedBytes: Number(company.storageUsedBytes || 0),
+  };
+};
+
 export const register = async (req, res) => {
   try {
     const { name, email, password, companyName } = req.body;
@@ -177,7 +186,7 @@ export const login = async (req, res) => {
           role: user.role,
           avatar: user.avatar,
           companyId: user.companyId,
-          company: company ? { id: company.id, name: company.name, plan: company.plan } : null,
+          company: serializeCompany(company),
           permissions: buildPermissions(user),
         },
       },
@@ -409,7 +418,11 @@ export const impersonateCompany = async (req, res) => {
       impersonatedCompanyId: company.id,
     }, '1h');
 
-    return sendSuccess(res, { token, company, user: ownerUser }, `Logged in as company ${company.name}`);
+    return sendSuccess(res, {
+      token,
+      company: serializeCompany(company),
+      user: ownerUser,
+    }, `Logged in as company ${company.name}`);
   } catch (error) {
     return sendError(res, error.message, 500);
   }

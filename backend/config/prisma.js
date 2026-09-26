@@ -6,6 +6,11 @@ dotenv.config();
 const { PrismaClient } = pkg;
 const globalForPrisma = global;
 
+BigInt.prototype.toJSON = function () {
+  return this.toString();
+};
+
+
 console.log('[Prisma] Initializing Prisma client...');
 
 export const prisma =
